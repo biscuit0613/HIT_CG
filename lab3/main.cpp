@@ -149,6 +149,7 @@ int main() {
     std::cout << "OpenGL version: " << glGetString(GL_VERSION) << "\n";
     std::cout << "GLEW version: " << glewGetString(GLEW_VERSION) << "\n";
 
+    /*
     float cubeVertices[] = {
         // positions // texture Coords // normals
         -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f,    //
@@ -193,30 +194,48 @@ int main() {
         -0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,       //
         -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f       //
     };
-    unsigned int cubeIndices[] = {
-        
+    */
+
+    // 正八面体顶点数据 (position.xyz, texCoord.xy, normal.xyz)
+    // 8 个三角形面，每个面 3 个顶点 -> 24 个顶点
+    float diamondVertices[] = {
+        // Top Front Right (normal: 1,1,1)
+        0.0f,  0.5f,  0.0f,   0.5f, 1.0f,   1.0f, 1.0f, 1.0f,
+        0.0f,  0.0f,  0.5f,   0.5f, 0.5f,   1.0f, 1.0f, 1.0f,
+        0.5f,  0.0f,  0.0f,   1.0f, 0.5f,   1.0f, 1.0f, 1.0f,
+        // Top Right Back (normal: 1,1,-1)
+        0.0f,  0.5f,  0.0f,   0.5f, 1.0f,   1.0f, 1.0f, -1.0f,
+        0.5f,  0.0f,  0.0f,   1.0f, 0.5f,   1.0f, 1.0f, -1.0f,
+        0.0f,  0.0f, -0.5f,   0.5f, 0.5f,   1.0f, 1.0f, -1.0f,
+        // Top Back Left (normal: -1,1,-1)
+        0.0f,  0.5f,  0.0f,   0.5f, 1.0f,  -1.0f, 1.0f, -1.0f,
+        0.0f,  0.0f, -0.5f,   0.5f, 0.5f,  -1.0f, 1.0f, -1.0f,
+       -0.5f,  0.0f,  0.0f,   0.0f, 0.5f,  -1.0f, 1.0f, -1.0f,
+        // Top Left Front (normal: -1,1,1)
+        0.0f,  0.5f,  0.0f,   0.5f, 1.0f,  -1.0f, 1.0f,  1.0f,
+       -0.5f,  0.0f,  0.0f,   0.0f, 0.5f,  -1.0f, 1.0f,  1.0f,
+        0.0f,  0.0f,  0.5f,   0.5f, 0.5f,  -1.0f, 1.0f,  1.0f,
+        // Bottom Front Left (normal: -1,-1,1)
+        0.0f, -0.5f,  0.0f,   0.5f, 0.0f,  -1.0f, -1.0f, 1.0f,
+        0.0f,  0.0f,  0.5f,   0.5f, 0.5f,  -1.0f, -1.0f, 1.0f,
+       -0.5f,  0.0f,  0.0f,   0.0f, 0.5f,  -1.0f, -1.0f, 1.0f,
+        // Bottom Left Back (normal: -1,-1,-1)
+        0.0f, -0.5f,  0.0f,   0.5f, 0.0f,  -1.0f, -1.0f, -1.0f,
+       -0.5f,  0.0f,  0.0f,   0.0f, 0.5f,  -1.0f, -1.0f, -1.0f,
+        0.0f,  0.0f, -0.5f,   0.5f, 0.5f,  -1.0f, -1.0f, -1.0f,
+        // Bottom Back Right (normal: 1,-1,-1)
+        0.0f, -0.5f,  0.0f,   0.5f, 0.0f,   1.0f, -1.0f, -1.0f,
+        0.0f,  0.0f, -0.5f,   0.5f, 0.5f,   1.0f, -1.0f, -1.0f,
+        0.5f,  0.0f,  0.0f,   1.0f, 0.5f,   1.0f, -1.0f, -1.0f,
+        // Bottom Right Front (normal: 1,-1,1)
+        0.0f, -0.5f,  0.0f,   0.5f, 0.0f,   1.0f, -1.0f, 1.0f,
+        0.5f,  0.0f,  0.0f,   1.0f, 0.5f,   1.0f, -1.0f, 1.0f,
+        0.0f,  0.0f,  0.5f,   0.5f, 0.5f,   1.0f, -1.0f, 1.0f
     };
-
-    //  float cubeVertices[] = {
-    //     // 前三个顶点位置        // 后两个纹理位置，即diamond.png的UV坐标
-    //     0.5f,  0.0f,  0.0f,  0.0f, 0.0f,    // 左
-    //     0.0f,  0.5f,  0.0f,  1.0f, 0.0f,    // 上
-    //     0.0f,  0.0f,  0.5f,  1.0f, 1.0f,    // 前
-    //     -0.5f, 0.0f,  0.0f,  0.0f, 0.0f,    // 右
-    //     0.0f,  -0.5f, 0.0f,  1.0f, 0.0f,    // 下
-    //     0.0f,  0.0f,  -0.5f, 1.0f, 1.0f,    // 后
-    // };
-
     // unsigned int cubeIndices[] = {
-    //     2, 1, 0,    // 前上左
-    //     2, 0, 4,    // 前左下
-    //     2, 4, 3,    // 前下右
-    //     2, 1, 3,    // 前上右
-    //     4, 0, 5,    // 后左下
-    //     0, 1, 5,    // 后上左
-    //     1, 3, 5,    // 后右上
-    //     4, 3, 5,    // 后右下这里指导书里面给的不对
+        
     // };
+
 
     glEnable(GL_DEPTH_TEST);
 
@@ -228,8 +247,8 @@ int main() {
     // glGenBuffers(1, &EBO);
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), &cubeVertices,
+    //glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), &cubeVertices,GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(diamondVertices), &diamondVertices,
                  GL_STATIC_DRAW);
     // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     // glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndices),
@@ -278,11 +297,11 @@ int main() {
                                            (float)SCR_WIDTH / (float)SCR_HEIGHT,
                                            0.1f, 100.0f));
         //lightPos:光源在世界坐标系里面的位置
-        shader_cube.setVec3("lightPos", 1.5f, 1.0f, 1.2f);
+        shader_cube.setVec3("lightPos", 1.0f, 1.0f, 1.0f);
         //把摄像机位置传给片段着色器
         shader_cube.setVec3("viewPos", camera.position);
         //rgb
-        shader_cube.setVec3("lightColor", 1.0f, 1.0f, 1.0f);
+        shader_cube.setVec3("lightColor", 0.5f, 1.0f, 0.3f);
 
         glBindVertexArray(VAO);
         glActiveTexture(GL_TEXTURE0);
@@ -290,7 +309,8 @@ int main() {
        
         // glDrawElements(GL_TRIANGLES,36, GL_UNSIGNED_INT, 0);
 
-        glDrawArrays(GL_TRIANGLES, 0, 36);
+        // 使用正八面体顶点数 24
+        glDrawArrays(GL_TRIANGLES, 0, 24);
 
         glfwSwapBuffers(window);
         glfwPollEvents();

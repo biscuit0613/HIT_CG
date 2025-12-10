@@ -24,7 +24,7 @@ uniform vec3 viewPos;       // 相机/观察者位置（世界坐标）
 void main()
 {
     //  镜面/漫反/环境光参数 
-    float specularStrength = 0.5; // 控制高光强度
+    float specularStrength = 0.9; // 控制高光强度
     float ambientStrength = 0.1;  // 环境光强度
 
     //  方向向量（都归一化） 
@@ -43,9 +43,9 @@ void main()
 
     //  镜面高光（Phong） 
     // dot(viewDir, reflectDir) 越接近 1，说明视线更接近反射方向 -> 高光越强
-    // pow(..., 32) 控制高光聚集程度（高指数 -> 更小更亮的高光斑）
+    // pow(..., 32) 控制高光聚集程度（高 -> 更小更亮的高光斑）
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
-    vec3 specular = specularStrength * spec * lightColor; // 镜面分量（通常不乘物体颜色）
+    vec3 specular = specularStrength * spec * lightColor; // 镜面分量
 
     // 漫反射（Lambert）
     // 用法线和光向量的点乘来计算漫反射强度，取 0 到 1
