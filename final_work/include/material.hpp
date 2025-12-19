@@ -4,6 +4,7 @@
 #include "utils.h"
 #include "ray.h"
 #include "hittable_obj.h"
+#include "texture.hpp"
 
 // struct HitRecord;
 
@@ -11,7 +12,7 @@
 *材质基类，所有材质都应继承自此类
 *材质决定了光线与物体表面交互的方式。
 *@func emitted，表示材质发光（如光源材质）
-*@func scatter，它决定了入射光线 (r_in) 如何被散射成新的光线 (scatteredRay)，以及光线被衰减了多少 (loss)。
+*@func scatter，它决定了入射光线 (r_in) 如何被散射成新的光线 (scatteredRay)，以及光线被衰减了多少 (attenuation)。
 */
 class Material {
 public:
@@ -39,8 +40,8 @@ public:
 class DiffuseLight : public Material {
 public:
     //传入颜色指针或者颜色值
-    DiffuseLight(shared_ptr<Color> a) : emit(a) {}
-    DiffuseLight(Color c) : emit(make_shared<Color>(c)) {}
+    DiffuseLight(shared_ptr<Texture> a) : emit(a) {}
+    DiffuseLight(Color c) : emit(make_shared<SolidColor>(c)) {}
 
     virtual bool scatter(
         const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scatteredRay
@@ -50,11 +51,11 @@ public:
     }
 
     virtual Color emitted(double u, double v, const Point3& p) const override {
-        return *emit;
+        return emit->value(u, v, p);
     }
 
 public:
-    shared_ptr<Color> emit;
+    shared_ptr<Texture> emit;
 };
 
 // 朗伯漫反射材质 (Lambertian)
@@ -66,7 +67,8 @@ public:
 class Lambertian : public Material {
 public:
     //构造函数，传入漫反射颜色
-    Lambertian(const Color& a) : albedo(a) {}
+    Lambertian(const Color& a) : albedo(make_shared<SolidColor>(a)) {}
+    Lambertian(shared_ptr<Texture> a) : albedo(a) {}
 
     virtual bool scatter(
         const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scatteredRay
@@ -80,12 +82,12 @@ public:
             scatter_direction = rec.normal;
 
         scatteredRay = Ray(rec.p, scatter_direction);
-        attenuation = albedo;
+        attenuation = albedo->value(rec.u, rec.v, rec.p);
         return true;
     }
 
 public:
-    Color albedo;
+    shared_ptr<Texture> albedo;
 };
 
 // 金属材质 (Metal)
@@ -124,13 +126,27 @@ public:
 */
 class Dielectric : public Material {
 public:
-    /*index_of_refraction: 折射率，见高中物理*/
-    Dielectric(double index_of_refraction) : ir(index_of_refraction) {}
+    /*index_of_refraction: 折射率*/
+    /*absorb: 吸光系数 (Beer's Law)*/
+    Dielectric(double index_of_refraction, Color absorb = Color(0,0,0)) 
+        : ir(index_of_refraction), absorbance(absorb) {}
 
     virtual bool scatter(
         const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scatteredRay
     ) const override {
-        attenuation = Color(1.0, 1.0, 1.0); // 玻璃通常不吸收光线（全透明）
+        // attenuation = Color(1.0, 1.0, 1.0); // 玻璃通常不吸收光线（全透明）
+        
+        // Beer's Law implementation
+        // 如果光线在介质内部传播 (!rec.front_face)，则根据距离衰减
+        if (!rec.front_face) {
+            // 距离是 rec.t
+            double r = exp(-absorbance.x() * rec.t);
+            double g = exp(-absorbance.y() * rec.t);
+            double b = exp(-absorbance.z() * rec.t);
+            attenuation = Color(r, g, b);
+        } else {
+            attenuation = Color(1.0, 1.0, 1.0);
+        }
         
         // 判断是进入介质还是离开介质
         // 如果是光击中前向面（从外部射入），折射率比是 1.0/ir
@@ -152,10 +168,28 @@ public:
 
         // 菲涅尔效应 (Fresnel Effect) 近似
         // 即使可以折射，也有一部分光会被反射（如从侧面看玻璃窗）
-        if (cannot_refract || reflectance(cos_theta, refraction_ratio) > random_double())
+        // 优化：使用重要性采样 (Importance Sampling) 来减少噪点
+        // 参考 smallpt 的做法，人为增加反射的采样概率，然后通过权重补偿
+        double refl_prob = reflectance(cos_theta, refraction_ratio);
+        
+        if (cannot_refract) {
             direction = reflect(unit_direction, rec.normal);
-        else
-            direction = refract(unit_direction, rec.normal, refraction_ratio);
+        }
+        else {
+            // 混合概率：保证至少有 25% 的概率采样反射，或者基于菲涅尔项
+            // 这样可以更好地捕捉玻璃表面的高光反射
+            double P = 0.25 + 0.5 * refl_prob; 
+            double RP = refl_prob / P;              // 反射路径的权重补偿
+            double TP = (1.0 - refl_prob) / (1.0 - P); // 折射路径的权重补偿
+
+            if (random_double() < P) {
+                direction = reflect(unit_direction, rec.normal);
+                attenuation = attenuation * RP;
+            } else {
+                direction = refract(unit_direction, rec.normal, refraction_ratio);
+                attenuation = attenuation * TP;
+            }
+        }
 
         scatteredRay = Ray(rec.p, direction);
         return true;
@@ -163,12 +197,13 @@ public:
 
 private:
     double ir; // 折射率 (Index of Refraction)
+    Color absorbance; // 吸光系数
 
     // Schlick 近似：计算菲涅尔反射比率
-    static double reflectance(double cosine, double ref_idx) {
+    static double reflectance(double cos, double ref_idx) {
         auto r0 = (1-ref_idx) / (1+ref_idx);
         r0 = r0*r0;
-        return r0 + (1-r0)*pow((1 - cosine), 5);
+        return r0 + (1-r0)*pow((1 - cos), 5);
     }
 };
 

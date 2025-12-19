@@ -3,7 +3,8 @@
 #include "sphere.h"
 #include "camera.h"
 #include "material.hpp"
-
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -22,24 +23,32 @@ Color ray_color(const Ray& r, const HittableObj& world, int depth) {
     HitRecord rec;
 
     // 如果超过了光线反弹限制，则不再收集光线。
-    if (depth <= 0)
-        return Color(0,0,0);
+    // if (depth <= 0)
+    //     return Color(0,0,0);
 
-    // 0.001 是为了忽略非常接近零的撞击（阴影痤疮）
+    // 0.001 是为了忽略非常接近零的撞击
     if (world.hit(r, 0.001, infinity, rec)) {
         Ray scatteredRay;
         Color attenuation;
         Color emitted = rec.mat_ptr->emitted(0, 0, rec.p);
 
         // 递归步骤：散射光线并累积颜色
-        if (rec.mat_ptr->scatter(r, rec, attenuation, scatteredRay))
+        if (rec.mat_ptr->scatter(r, rec, attenuation, scatteredRay)) {
+            // Russian Roulette (轮盘赌)
+            // 当深度较深时（例如反弹超过5次，即 depth < 45），启用轮盘赌
+            if (depth < 45) {
+                double p = 0.8; // 存活概率
+                if (random_double() > p)
+                    return emitted; // 终止路径
+                attenuation = attenuation / p; // 能量补偿
+            }
             return emitted + attenuation * ray_color(scatteredRay, world, depth-1);
+        }
         return emitted;
     }
 
-    // 背景（天空）
-    // 如果没有击中任何物体，返回环境光（天空颜色）
-    // 为了防止背景太暗，我们可以稍微调亮一点，或者保持原样作为环境光
+    // 如果没有击中任何物体，返回环境光
+    // 为了防止背景太暗，可以稍微调亮一点，或者保持原样作为环境光
     Vec3 unit_direction = unit_vector(r.direction());
     auto t = 0.5*(unit_direction.y() + 1.0);
     return (1.0-t)*Color(1.0, 1.0, 1.0) + t*Color(0.5, 0.7, 1.0);
@@ -62,7 +71,7 @@ Color ray_color(const Ray& r, const HittableObj& world, int depth) {
 // };
 
 
-// 将颜色写入流的工具函数这玩意不方便定义在utils.h里，因为会引入循环依赖
+// 将颜色写入流的工具函数,这玩意不方便定义在utils.h里，因为会引入循环依赖
 void write_color(std::ostream &out, Color pixelColor, int samplesPerPixel)
  {
     auto r = pixelColor.x();
@@ -103,11 +112,17 @@ int main(int argc, char* argv[]) {
 
     //用指针的方式创建材质，方便多个物体共享同一个材质。
     auto material_ground = make_shared<Lambertian>(Color(0.5, 0.5, 0.5)); // 地面灰色
+    // auto material_ground_texture = make_shared<ImageTexture>("maodie.png"); 
+    // auto material_ground = make_shared<Lambertian>(material_ground_texture);
+
     auto material_wall_back = make_shared<Lambertian>(Color(0.7, 0.3, 0.3)); // 后墙红色
     auto material_wall_right = make_shared<Lambertian>(Color(0.3, 0.7, 0.3)); // 右墙绿色
     auto material_wall_left = make_shared<Lambertian>(Color(0.3, 0.3, 0.7)); // 左墙蓝色
     
     auto material_center = make_shared<Lambertian>(Color(0.1, 0.2, 0.5));
+    // auto material_center_texture = make_shared<ImageTexture>("maodie.png");
+    // auto material_center = make_shared<Lambertian>(material_center_texture);
+
     auto material_glass   = make_shared<Dielectric>(1.5); // 玻璃 / 水晶球
     auto material_metal  = make_shared<Metal>(Color(0.8, 0.6, 0.2), 0.0);
     auto material_light = make_shared<DiffuseLight>(Color(4, 4, 4)); // 强光
@@ -145,7 +160,7 @@ int main(int argc, char* argv[]) {
     std::ofstream outfile(filename);
     outfile << "P3\n" << image_width << " " << image_height << "\n255\n";
 
-    std::cout << "Start Rendering with OpenMP..." << std::endl;
+    std::cout << "用OpenMP加速,开始渲染了嗷..." << std::endl;
 
     // --- 原始代码 (已注释) ---
     /*
@@ -196,7 +211,7 @@ int main(int argc, char* argv[]) {
         {
             --scanlines_remaining;
             if (scanlines_remaining % 10 == 0)
-                std::cerr << "\rScanlines remaining: " << scanlines_remaining << ' ' << std::flush;
+                std::cerr << "\r剩余扫描线: " << scanlines_remaining << ' ' << std::flush;
         }
 
         for (int i = 0; i < image_width; ++i) {
@@ -229,7 +244,9 @@ int main(int argc, char* argv[]) {
                 << static_cast<int>(buffer[i+2]) << '\n';
     }
 
-    std::cout << "\nDone.\n";
+    std::cout << "\n完事\n";
     outfile.close();
     std::cout << "ppm格式的文件已保存到 " << filename << std::endl;
+    filename = (argc >= 2) ? argv[1] : "output.ppm";
+    std::cout << "查看ppm文件: cd ../&& python3 read_ppm.py \"" << filename << "\"" << std::endl;
 }

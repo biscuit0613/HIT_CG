@@ -18,9 +18,9 @@
 class Camera {
 public:
     Camera(
-        Point3 lookfrom,
-        Point3 lookat,
-        Vec3   vup,
+        Point3 lookfrom,//从哪里看
+        Point3 lookat,//往哪看
+        Vec3   vup,//相机的上向量
         double vfov, // 垂直视野 (vertical field-of-view)，以度为单位
         double aspect_ratio
     ) {

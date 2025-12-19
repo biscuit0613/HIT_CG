@@ -26,9 +26,10 @@ public:
     void add(shared_ptr<HittableObj> object) { objects.push_back(object); }
 
     virtual bool hit(const Ray& r, double t_min, double t_max, HitRecord& rec) const override;
+    virtual bool bounding_box(double time0, double time1, aabb& output_box) const override;
 };
 
-//迭代检测光线与场景中所有物体的相交情况，这里还不涉及反射，只是检测相交，处理遮挡。
+//迭代检测光线与场景中所有物体的相交情况，这里还不涉及反射，只是检测相交，处理遮挡。t就是光线的参数。
 /**
 *@param & r 入射光线
 *@param t_min 最小 t 值，防止自相交
@@ -50,6 +51,21 @@ bool HittableObjList::hit(const Ray& r, double t_min, double t_max, HitRecord& r
     }
 
     return hitFirstObj;
+}
+
+bool HittableObjList::bounding_box(double time0, double time1, aabb& output_box) const {
+    if (objects.empty()) return false;
+
+    aabb temp_box;
+    bool first_box = true;
+
+    for (const auto& object : objects) {
+        if (!object->bounding_box(time0, time1, temp_box)) return false;
+        output_box = first_box ? temp_box : surrounding_box(output_box, temp_box);
+        first_box = false;
+    }
+
+    return true;
 }
 
 #endif

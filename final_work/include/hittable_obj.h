@@ -3,6 +3,7 @@
 
 #include "ray.h"
 #include "utils.h"
+#include "aabb.h"
 
 class Material;
 
@@ -20,6 +21,8 @@ struct HitRecord {
     Vec3 normal;
     shared_ptr<Material> mat_ptr;
     double t;
+    double u;
+    double v;
     bool front_face;
     /**
     光线与物体相交时，设置法线方向和前后面标志
@@ -49,7 +52,9 @@ public:
     *@return 如果光线与物体相交，返回 true 并填充 rec，否则返回 false
     */
     virtual bool hit(const Ray& r, double t_min, double t_max, HitRecord& rec) const = 0;
-    //hit函数不应该在这里实现，因为每个具体的物体（如球体、平面等）都有不同的相交逻辑，如果在这里实现就失去了多态性。
+
+    virtual bool bounding_box(double time0, double time1, aabb& output_box) const = 0;
+    //hit函数不应该在这里实现，因为每个具体的物体都有不同的相交逻辑，如果在这里实现就失去了多态性。
 };
 
 #endif
