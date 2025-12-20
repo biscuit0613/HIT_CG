@@ -162,6 +162,7 @@ public:
 
         // 判断是否发生全内反射 (Total Internal Reflection)
         // 当光线从高折射率介质射向低折射率介质，且入射角足够大时，无法折射
+        //eg:玻璃球->空气   
         bool cannot_refract = refraction_ratio * sin_theta > 1.0;
         
         Vec3 direction;

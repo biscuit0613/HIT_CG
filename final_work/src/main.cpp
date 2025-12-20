@@ -3,6 +3,8 @@
 #include "sphere.h"
 #include "camera.h"
 #include "material.hpp"
+#include "mesh_loader.h"
+#include "bvh.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include <iostream>
@@ -139,7 +141,16 @@ int main(int argc, char* argv[]) {
     auto material_metal  = make_shared<Metal>(Color(0.8, 0.6, 0.2), 0.1);
     // 提高光源亮度，配合 ACES 色调映射
     auto material_light = make_shared<DiffuseLight>(Color(8.0, 8.0, 8.0)); // 强光
-
+    // 加载 Mesh (Dragon)
+    // 这里的 scale 和 offset 是根据 obj 文件的大致坐标范围估算的
+    // 原始坐标大概在 X[-60, -20], Y[-16, -10], Z[-10, 2]
+    // 我们希望它在场景中心 (0, 0, -1) 附近，且大小适中
+    auto material_dragon = make_shared<Metal>(Color(0.9, 0.1, 0.1), 0.1); // 红色金属龙
+    auto dragon_triangles = load_obj("../mesh/xyzrgb_dragon.obj", material_glass, 0.1, Point3(4, 1.3, -1.0));
+    if (dragon_triangles->objects.size() > 0) {
+        std::cout << "正在构建 BVH..." << std::endl;
+        world.add(make_shared<BvhNode>(*dragon_triangles, 0, 1));
+    }
     //目前平面类还每实现
     // 地面
     world.add(make_shared<Sphere>(Point3( 0.0, -100.5, -1.0), 100.0, material_ground));
@@ -154,9 +165,9 @@ int main(int argc, char* argv[]) {
     world.add(make_shared<Sphere>(Point3(0, 4, -1), 1.0, material_light));
 
     // 物体
-    world.add(make_shared<Sphere>(Point3( 0.0,    0.0, -1.0),   0.5, material_center));
-    world.add(make_shared<Sphere>(Point3(-1.1,    0.0, -1.0),   0.5, material_glass));
-    world.add(make_shared<Sphere>(Point3( 1.1,    0.0, -1.0),   0.5, material_metal));
+    // world.add(make_shared<Sphere>(Point3( 0.0,    0.0, -1.0),   0.5, material_center));
+    // world.add(make_shared<Sphere>(Point3(-1.1,    0.0, -1.0),   0.5, material_glass));
+    // world.add(make_shared<Sphere>(Point3( 1.1,    0.0, -1.0),   0.5, material_metal));
 
     // 摄像机
     Point3 lookfrom(0, 1, 4); // 调整相机位置，正对墙角

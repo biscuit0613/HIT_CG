@@ -4,6 +4,9 @@
 #include "ray.h"
 #include "utils.h"
 
+/**
+*aabb盒：AABB指的是轴对齐边界盒（Axis-Aligned Bounding Box）
+ */
 class aabb {
 public:
     aabb() {}
