@@ -10,6 +10,22 @@
 #include <vector>
 #include <omp.h>
 
+// --- 新增: ACES 色调映射 ---
+// 这种映射曲线能更好地保留高光细节，让画面更有电影感
+Vec3 aces_approx(Vec3 v) {
+    v *= 0.6;
+    double a = 2.51;
+    double b = 0.03;
+    double c = 2.43;
+    double d = 0.59;
+    double e = 0.14;
+    // 逐分量应用公式
+    return Vec3(
+        clamp((v.x()*(a*v.x()+b))/(v.x()*(c*v.x()+d)+e), 0.0, 1.0),
+        clamp((v.y()*(a*v.y()+b))/(v.y()*(c*v.y()+d)+e), 0.0, 1.0),
+        clamp((v.z()*(a*v.z()+b))/(v.z()*(c*v.z()+d)+e), 0.0, 1.0)
+    );
+}
 
 
 // 递归光线追踪函数
@@ -65,30 +81,25 @@ Color ray_color(const Ray& r, const HittableObj& world, int depth) {
 //     return Color(0,0,0);
 // }
 
-// --- 拓展 2: 贝塞尔曲面占位符 ---
-// class BezierSurface : public Hittable {
-//     // 实现贝塞尔曲线旋转扫描的撞击函数
-// };
 
+// // 将颜色写入流的工具函数,这玩意不方便定义在utils.h里，因为会引入循环依赖
+// void write_color(std::ostream &out, Color pixelColor, int samplesPerPixel)
+//  {
+//     auto r = pixelColor.x();
+//     auto g = pixelColor.y();
+//     auto b = pixelColor.z();
 
-// 将颜色写入流的工具函数,这玩意不方便定义在utils.h里，因为会引入循环依赖
-void write_color(std::ostream &out, Color pixelColor, int samplesPerPixel)
- {
-    auto r = pixelColor.x();
-    auto g = pixelColor.y();
-    auto b = pixelColor.z();
+//     // 将颜色除以样本数并进行 gamma=2.0 的伽马校正。
+//     auto scale = 1.0 / samplesPerPixel;
+//     r = sqrt(scale * r);
+//     g = sqrt(scale * g);
+//     b = sqrt(scale * b);
 
-    // 将颜色除以样本数并进行 gamma=2.0 的伽马校正。
-    auto scale = 1.0 / samplesPerPixel;
-    r = sqrt(scale * r);
-    g = sqrt(scale * g);
-    b = sqrt(scale * b);
-
-    // 写入每个颜色分量的转换后的 [0,255] 值。
-    out << static_cast<int>(256 * clamp(r, 0.0, 0.999)) << ' '
-        << static_cast<int>(256 * clamp(g, 0.0, 0.999)) << ' '
-        << static_cast<int>(256 * clamp(b, 0.0, 0.999)) << '\n';
-}
+//     // 写入每个颜色分量的转换后的 [0,255] 值。
+//     out << static_cast<int>(256 * clamp(r, 0.0, 0.999)) << ' '
+//         << static_cast<int>(256 * clamp(g, 0.0, 0.999)) << ' '
+//         << static_cast<int>(256 * clamp(b, 0.0, 0.999)) << '\n';
+// }
 
 int main(int argc, char* argv[]) {
 
@@ -123,9 +134,11 @@ int main(int argc, char* argv[]) {
     // auto material_center_texture = make_shared<ImageTexture>("maodie.png");
     // auto material_center = make_shared<Lambertian>(material_center_texture);
 
-    auto material_glass   = make_shared<Dielectric>(1.5); // 玻璃 / 水晶球
-    auto material_metal  = make_shared<Metal>(Color(0.8, 0.6, 0.2), 0.0);
-    auto material_light = make_shared<DiffuseLight>(Color(4, 4, 4)); // 强光
+    auto material_glass = make_shared<Dielectric>(1.5); // 玻璃 / 水晶球
+    // 增加一点粗糙度 (fuzz = 0.1) 让金属看起来更真实，不是完美的镜子
+    auto material_metal  = make_shared<Metal>(Color(0.8, 0.6, 0.2), 0.1);
+    // 提高光源亮度，配合 ACES 色调映射
+    auto material_light = make_shared<DiffuseLight>(Color(8.0, 8.0, 8.0)); // 强光
 
     //目前平面类还每实现
     // 地面
@@ -223,11 +236,22 @@ int main(int argc, char* argv[]) {
                 pixel_color += ray_color(r, world, max_depth);
             }
             
-            // 立即进行颜色处理（Gamma 校正 + 转换）
+            // 立即进行颜色处理（Tone Mapping + Gamma 校正 + 转换）
             auto scale = 1.0 / samples_per_pixel;
-            auto r = sqrt(scale * pixel_color.x());
-            auto g = sqrt(scale * pixel_color.y());
-            auto b = sqrt(scale * pixel_color.z());
+            Vec3 color = pixel_color * scale;
+
+            // 1. 应用 ACES 色调映射 (处理 HDR 高光)
+            color = aces_approx(color);
+
+            // // 2. Gamma 校正 (Gamma 近似2.0, 即开根号)
+            // auto r = sqrt(color.x());
+            // auto g = sqrt(color.y());
+            // auto b = sqrt(color.z());
+
+            //标准的伽马校正gamma=2.2   
+            auto r = pow(color.x(), 1.0/2.2);
+            auto g = pow(color.y(), 1.0/2.2);
+            auto b = pow(color.z(), 1.0/2.2);
 
             // 计算缓冲区索引
             int index = ((image_height - 1 - j) * image_width + i) * 3;
@@ -248,5 +272,5 @@ int main(int argc, char* argv[]) {
     outfile.close();
     std::cout << "ppm格式的文件已保存到 " << filename << std::endl;
     filename = (argc >= 2) ? argv[1] : "output.ppm";
-    std::cout << "查看ppm文件: cd ../&& python3 read_ppm.py \"" << filename << "\"" << std::endl;
+    std::cout << "查看ppm文件: cd ../&& python3 read_ppm.py " << filename  << std::endl;
 }
