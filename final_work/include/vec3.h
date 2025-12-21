@@ -8,7 +8,7 @@
 using std::sqrt;
 
 /*
-注意一下两个类型别名：
+两个类型别名：
     Point3: 用于表示三维空间中的点
     Color:  用于表示 RGB 颜色值
 */
@@ -17,7 +17,7 @@ public:
     double e[3];
 
     Vec3() : e{0,0,0} {}
-    Vec3(double e0, double e1, double e2) : e{e0, e1, e2} {}
+Vec3(double e0, double e1, double e2) : e{e0, e1, e2} {}
 
     double x() const { return e[0]; }
     double y() const { return e[1]; }
@@ -147,6 +147,22 @@ inline Vec3 random_in_hemisphere(const Vec3& normal) {
         return in_unit_sphere;
     else
         return -in_unit_sphere;
+}
+
+// ACES 色调映射tone mapping 近似，因为sppm和path tracing都需要这个，所以挪到这里来了
+inline Vec3 aces_approx(Vec3 v) {
+    v *= 0.6;
+    double a = 2.51;
+    double b = 0.03;
+    double c = 2.43;
+    double d = 0.59;
+    double e = 0.14;
+    // 逐分量应用公式
+    return Vec3(
+        clamp((v.x()*(a*v.x()+b))/(v.x()*(c*v.x()+d)+e), 0.0, 1.0),
+        clamp((v.y()*(a*v.y()+b))/(v.y()*(c*v.y()+d)+e), 0.0, 1.0),
+        clamp((v.z()*(a*v.z()+b))/(v.z()*(c*v.z()+d)+e), 0.0, 1.0)
+    );
 }
 
 #endif

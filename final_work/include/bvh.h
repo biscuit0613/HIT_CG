@@ -9,7 +9,7 @@
 
 class BvhNode : public HittableObj {
 public:
-    BvhNode();
+    BvhNode() {}
 
     BvhNode(const HittableObjList& list, double time0, double time1)
         : BvhNode(list.objects, 0, list.objects.size(), time0, time1)

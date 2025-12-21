@@ -10,7 +10,6 @@ uniform float radius; //  0.9
 uniform float edge;   // 0.02
 uniform vec3 innerColor; // 中心颜色
 uniform vec3 outerColor; // 边缘颜色
-
 // 计算给定距离 d 的径向渐变颜色（从 innerColor 到 outerColor）
 vec3 radialGradient(float d) {
     float r = radius;
@@ -27,7 +26,6 @@ vec3 radialGradient(float d) {
 
     return mix(inC, outC, t);
 }
-
 // 原来的 step 函数现在返回 vec3（颜色），内部调用 radialGradient
 vec3 step(float distance) {
     float e = edge;
@@ -40,12 +38,10 @@ vec3 step(float distance) {
     }
     return vec3(0.0);
 }
-
 void main()
 {
     vec2 uv = TexCoords * 2.0 - 1.0; // 把 [0,1] 映射到 [-1,1]
     uv.x *= w_div_h; // 宽高比调整
-
     float d = length(uv); // 当前片元到中心的距离
     vec3 color = step(d); // 调用 step 返回渐变颜色
     FragColor = vec4(color, 1.0f);

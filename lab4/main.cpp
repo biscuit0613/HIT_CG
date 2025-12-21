@@ -163,7 +163,7 @@ int main() {
     
     // 帧缓冲（FBO）设置
     // 1) 生成并绑定帧缓冲对象：
-    //    生成一个 FBO（Framebuffer Object），后续附件（颜色纹理 / 深度模板 RBO）
+    //    生成一个 FBO，后续附件（颜色纹理 / 深度模板 RBO）
     //    都会被附加到当前绑定的 FBO 上，之后渲染到 FBO 相当于渲染到这些附件。
     unsigned int frameBuffer;
     glGenFramebuffers(1, &frameBuffer);
@@ -175,14 +175,13 @@ int main() {
     glGenTextures(1, &texColorBuffer);
     glBindTexture(GL_TEXTURE_2D, texColorBuffer);
     // 分配纹理存储（不提供初始数据），格式为 RGB，尺寸为当前帧缓冲尺寸，其实就是一个空的2D纹理
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB,
-                 GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height,
+         0, GL_RGB,GL_UNSIGNED_BYTE, NULL);
     
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     // 解绑纹理
     glBindTexture(GL_TEXTURE_2D, 0);
-
     // 将该纹理附加到当前绑定的 FBO 的颜色附件 0 上（GL_COLOR_ATTACHMENT0）
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
                            texColorBuffer, 0);
@@ -222,8 +221,8 @@ int main() {
         glEnable(GL_DEPTH_TEST);
         
         circle_shader.use();
-        circle_shader.setFloat("radius", 0.5f);
-        circle_shader.setFloat("edge", 0.5f);
+        circle_shader.setFloat("radius", 0.7f);
+        circle_shader.setFloat("edge", 0.2f);
         circle_shader.setVec3("innerColor", glm::vec3(0.0f, 0.0f, 0.0f));
         circle_shader.setVec3("outerColor", glm::vec3(1.0f, 0.0f, 0.0f));
         circle_shader.setFloat("w_div_h", (float)width / (float)height);
