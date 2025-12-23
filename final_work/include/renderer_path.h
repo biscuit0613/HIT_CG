@@ -28,9 +28,12 @@ inline Color ray_color(const Ray& r, const HittableObj& world, int depth) {
                     return emitted; // 终止路径
                 attenuation = attenuation / p; // 能量补偿
             }
-            return emitted + attenuation * ray_color(scatteredRay, world, depth-1);
+
+            return emitted + attenuation * ray_color(scatteredRay, world, depth-1) ;
         }
-        return emitted;
+        // 增加微弱的环境光 (Ambient Light)
+        Color ambient(0.1, 0.1, 0.1);
+        return emitted+ attenuation * ambient;
     }
 
     // 环境光

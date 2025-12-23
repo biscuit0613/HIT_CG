@@ -3,6 +3,8 @@
 #include "bvh.h"
 #include "bvh_serializer.h"
 #include "renderer_path.h"
+#include "renderer_ppm.h"
+#include "renderer_pm.h"
 #include "renderer_sppm.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -59,9 +61,9 @@ int main(int argc, char* argv[]) {
     
     if (height == 0) height = static_cast<int>(width / (16.0/9.0));
 
-    std::cout << "Mode: " << mode << "\n";
-    std::cout << "Size: " << width << "x" << height << "\n";
-    std::cout << "Samples/Photons: " << samples << "\n";
+    std::cout << "光追模式(path tracing/sppm): " << mode << "\n";
+    std::cout << "尺寸: " << width << "x" << height << "\n";
+    std::cout << "采样数(path tracing)/光子数(sppm): " << samples << "\n";
 
     // 图像
     const auto aspect_ratio = double(width) / height;
@@ -91,8 +93,8 @@ int main(int argc, char* argv[]) {
     // 增加一点粗糙度 (fuzz = 0.01) 让金属看起来更真实，不是完美的镜子
     auto material_metal  = make_shared<Metal>(Color(0.8, 0.6, 0.2), 0.01);
     // 提高光源亮度，配合 ACES 色调映射
-    // auto material_light = make_shared<DiffuseLight>(Color(8.0, 8.0, 8.0)); // 强光（path tracing用的）
-    auto material_light = make_shared<DiffuseLight>(Color(200.0, 200.0, 200.0)); // 更强的光（SPPM用的）
+    auto material_light = make_shared<DiffuseLight>(Color(8.0, 8.0, 8.0)); // 光（path tracing用的）
+    // auto material_light = make_shared<DiffuseLight>(Color(200.0, 200.0, 200.0)); // 更强的光（SPPM用的）
     // 加载 Mesh (Dragon)
     // 这里的 scale 和 offset 是根据 obj 文件的大致坐标范围估算的
     // 原始坐标大概在 X[-60, -20], Y[-16, -10], Z[-10, 2]
@@ -133,22 +135,34 @@ int main(int argc, char* argv[]) {
     world.add(make_shared<Sphere>(Point3(-1002, 0, -1), 1000, material_wall_left));
     // 右墙
     world.add(make_shared<Sphere>(Point3( 1002, 0, -1), 1000, material_wall_right));
+    //前墙
+    world.add(make_shared<Sphere>(Point3(0, 0, 1005), 1000, material_wall_back));
 
     // 光源 (在上方)
-    auto light_sphere = make_shared<Sphere>(Point3(0, 4, -1), 1.0, material_light);
+    auto light_sphere = make_shared<Sphere>(Point3(0, 1.5, -0.5), 0.2, material_light);
+    //这里把光源放到摄像机前面，可以直接看见光源，方便测试SPPM直接光照部分
+    
     world.add(light_sphere);
     lights.push_back(light_sphere); // Add to lights list
 
     // 物体
-    world.add(make_shared<Sphere>(Point3( -1.1,    0.0, -1.0),   0.3, material_center));
+    // world.add(make_shared<Sphere>(Point3( 0.0,    0.0, -1.0),   0.3, material_center));
     world.add(make_shared<Sphere>(Point3(0.0,    0.0, 0.5),   0.4, material_glass));
     world.add(make_shared<Sphere>(Point3( 1.1,    0.0, -1.1),   0.7, material_metal));
 
     // 摄像机
     Point3 lookfrom(0, 1, 4); // 调整相机位置，正对墙角
     Point3 lookat(0,0,-1);
+    
+    // 调整相机以观察焦散
+    // 光源在 (0, 0.8, -0.5)，玻璃球在 (0, 0, 0.5)
+    // 光线穿过玻璃球后，焦散会投射在玻璃球后方的地面上 (Z轴正向，Y=-0.5)
+    // 所以我们需要从侧后方或者正后方看地面
+    // Point3 lookfrom(0, 0.5, 2.5); // 降低高度，拉近距离
+    // Point3 lookat(0, -0.5, 0.5);  // 看向玻璃球下方的地面区域
+    
     Vec3 vup(0,1,0);
-    auto dist_to_focus = (lookfrom-lookat).length();
+    auto dist_to_focus = (lookfrom-lookat).length();//或许可以实现景深效果？
     auto aperture = 2.0;
 
     Camera cam(lookfrom, lookat, vup, 35, aspect_ratio); // 稍微增大 FOV 以看到更多墙角
@@ -160,12 +174,22 @@ int main(int argc, char* argv[]) {
 
     std::vector<unsigned char> buffer;
 
-    if (mode == "sppm") {
+    if (mode == "pm") {
+        // Simple PM Parameters
+        int num_photons = samples * 10000; 
+        double radius = 0.01; 
+        render_pm(world, lights, cam, image_width, image_height, num_photons, max_depth, radius, buffer);
+    } else if (mode == "ppm") {
+        // PPM Parameters
+        int num_photons = samples * 10000; 
+        double radius = 0.01; 
+        render_ppm(world, lights, cam, image_width, image_height, num_photons, max_depth, radius, buffer);
+    } else if (mode == "sppm") {
         // SPPM Parameters
-        int iterations = 10; // Number of progressive passes
-        int photons = 10000; // Photons per pass
-        double radius = 0.1; // Initial search radius
-        render_sppm(world, lights, cam, image_width, image_height, iterations, photons, max_depth, radius, buffer);
+        int iterations = samples;
+        int photons_per_iter = 10000;
+        double radius = 0.01;
+        render_sppm(world, lights, cam, image_width, image_height, iterations, photons_per_iter, max_depth, radius, buffer);
     } else {
         // Default Path Tracing
         render_path_tracing(world, cam, image_width, image_height, samples_per_pixel, max_depth, buffer);

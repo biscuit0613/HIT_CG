@@ -34,7 +34,7 @@ public:
 /**
 * 模拟自发光的材质，如灯光
 * DiffuseLight 构造函数：传入发光颜色或颜色指针
-* scatter 函数实现：光源不散射光线，只发光
+* scatter 函数实现：r_in碰到光源不进行互动，光源只会主动发光
 * emitted 函数实现：返回发光颜色
 */
 class DiffuseLight : public Material {
