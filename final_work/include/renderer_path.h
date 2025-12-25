@@ -11,32 +11,30 @@
 
 // 递归光线追踪函数
 inline Color ray_color(const Ray& r, const HittableObj& world, int depth) {
-    HitRecord rec;
-
+    HitRecord rec;//光线与物体的交点信息
     // 0.001 是为了忽略非常接近零的撞击
-    if (world.hit(r, 0.001, infinity, rec)) {
-        Ray scatteredRay;
-        Color attenuation;
-        Color emitted = rec.mat_ptr->emitted(0, 0, rec.p);
+    if (world.hit(r, 0.001, infinity, rec)) {//world.hit返回true说明光线击中了物体
+        Ray scatteredRay;//与材质交互后的光线
+        Color attenuation;//albedo,颜色衰减
+        Color emitted = rec.mat_ptr->emitted(0, 0, rec.p);//(忽略这里的uv坐标)获取材质发光颜色
 
-        // 递归步骤：散射光线并累积颜色
-        if (rec.mat_ptr->scatter(r, rec, attenuation, scatteredRay)) {
-            // Russian Roulette (轮盘赌)
+        // 递归步骤：光线与材质交互并累积颜色
+        if (rec.mat_ptr->scatter(r, rec, attenuation, scatteredRay)) {//scatter返回true说明有交互
+            // 递归达到一定次数，轮盘赌决定是否终止路径
             if (depth < 45) {
                 double p = 0.8; // 存活概率
                 if (random_double() > p)
                     return emitted; // 终止路径
                 attenuation = attenuation / p; // 能量补偿
             }
-
+            // 继续递归追踪和材质交互的光线
             return emitted + attenuation * ray_color(scatteredRay, world, depth-1) ;
         }
-        // 增加微弱的环境光 (Ambient Light)
+        // 增加环境光，调试的时候用，以防光源太暗看不清场景了
         Color ambient(0.1, 0.1, 0.1);
         return emitted+ attenuation * ambient;
     }
-
-    // 环境光
+    // 环境光，同上
     Vec3 unit_direction = unit_vector(r.direction());
     auto t = 0.5*(unit_direction.y() + 1.0);
     return (1.0-t)*Color(1.0, 1.0, 1.0) + t*Color(0.5, 0.7, 1.0);
@@ -51,18 +49,17 @@ inline void render_path_tracing(
     int max_depth,
     std::vector<unsigned char>& buffer
 ) {
-    std::cout << "Starting Path Tracing..." << std::endl;
+    std::cout << "开始光追渲染" << std::endl;
     
     buffer.resize(image_width * image_height * 3);
-    int scanlines_remaining = image_height;
+    int height_remain = image_height;
 
     #pragma omp parallel for schedule(dynamic, 1)
     for (int j = image_height-1; j >= 0; --j) {
         #pragma omp critical
         {
-            --scanlines_remaining;
-            if (scanlines_remaining % 10 == 0)
-                std::cerr << "\rScanlines remaining: " << scanlines_remaining << ' ' << std::flush;
+            --height_remain;
+                std::cerr << "\r剩余高度height: " << height_remain << ' ' << std::flush;
         }
 
         for (int i = 0; i < image_width; ++i) {
@@ -74,7 +71,7 @@ inline void render_path_tracing(
                 pixel_color += ray_color(r, world, max_depth);
             }
             
-            // Tone Mapping + Gamma
+            // Tone Mapping色调映射 + Gamma矫正
             auto scale = 1.0 / samples_per_pixel;
             Vec3 color = pixel_color * scale;
             color = aces_approx(color);
@@ -89,7 +86,7 @@ inline void render_path_tracing(
             buffer[index+2] = static_cast<unsigned char>(256 * clamp(b, 0.0, 0.999));
         }
     }
-    std::cout << "\nPath Tracing Done.\n";
+    std::cout << "\n光追渲染完成。\n";
 }
 
 #endif

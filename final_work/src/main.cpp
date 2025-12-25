@@ -1,11 +1,8 @@
 #include "material.hpp"
-#include "mesh_loader.h"
-#include "bvh.h"
-#include "bvh_serializer.h"
 #include "renderer_path.h"
 #include "renderer_ppm.h"
 #include "renderer_pm.h"
-#include "renderer_sppm.h"
+#include "vec3.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include <iostream>
@@ -61,9 +58,9 @@ int main(int argc, char* argv[]) {
     
     if (height == 0) height = static_cast<int>(width / (16.0/9.0));
 
-    std::cout << "光追模式(path tracing/sppm): " << mode << "\n";
+    std::cout << "光追模式(path tracing/pm/ppm): " << mode << "\n";
     std::cout << "尺寸: " << width << "x" << height << "\n";
-    std::cout << "采样数(path tracing)/光子数(sppm): " << samples << "\n";
+    std::cout << "采样数(path tracing)/光子数(pm/ppm): " << samples << "\n";
 
     // 图像
     const auto aspect_ratio = double(width) / height;
@@ -78,8 +75,8 @@ int main(int argc, char* argv[]) {
 
     //用指针的方式创建材质，方便多个物体共享同一个材质。
     auto material_ground = make_shared<Lambertian>(Color(0.5, 0.5, 0.5)); // 地面灰色
-    // auto material_ground_texture = make_shared<ImageTexture>("maodie.png"); 
-    // auto material_ground = make_shared<Lambertian>(material_ground_texture);
+    auto material_cat_pic = make_shared<ImageTexture>("maodie.png"); 
+    auto material_cat = make_shared<Lambertian>(material_cat_pic);
 
     auto material_wall_back = make_shared<Lambertian>(Color(0.7, 0.3, 0.3)); // 后墙红色
     auto material_wall_right = make_shared<Lambertian>(Color(0.3, 0.7, 0.3)); // 右墙绿色
@@ -89,43 +86,13 @@ int main(int argc, char* argv[]) {
     // auto material_center_texture = make_shared<ImageTexture>("maodie.png");
     // auto material_center = make_shared<Lambertian>(material_center_texture);
 
-    auto material_glass = make_shared<Dielectric>(1.5); // 玻璃 / 水晶球
+    auto material_glass = make_shared<Dielectric>(1.5); // 玻璃 
+    auto color_glass = make_shared<Dielectric>(1.5,Color(0,0.5,0));//绿色玻璃
     // 增加一点粗糙度 (fuzz = 0.01) 让金属看起来更真实，不是完美的镜子
     auto material_metal  = make_shared<Metal>(Color(0.8, 0.6, 0.2), 0.01);
-    // 提高光源亮度，配合 ACES 色调映射
-    auto material_light = make_shared<DiffuseLight>(Color(8.0, 8.0, 8.0)); // 光（path tracing用的）
-    // auto material_light = make_shared<DiffuseLight>(Color(200.0, 200.0, 200.0)); // 更强的光（SPPM用的）
-    // 加载 Mesh (Dragon)
-    // 这里的 scale 和 offset 是根据 obj 文件的大致坐标范围估算的
-    // 原始坐标大概在 X[-60, -20], Y[-16, -10], Z[-10, 2]
-    // 我们希望它在场景中心 (0, 0, -1) 附近，且大小适中
-    // auto material_dragon = make_shared<Metal>(Color(0.9, 0.1, 0.1), 0.1); // 红色金属龙
-    
-    // shared_ptr<HittableObj> dragon_bvh_root;
-    // std::string bvh_cache_file = "dragon_bvh.dat";
 
-    // 尝试从缓存加载 BVH
-    // std::cout << "尝试加载 BVH 缓存..." << std::endl;
-    // dragon_bvh_root = load_bvh_from_file(bvh_cache_file, material_dragon);
-
-    // if (dragon_bvh_root) {
-    //     std::cout << "成功从缓存加载 BVH!" << std::endl;
-    //     world.add(dragon_bvh_root);
-    // } else {
-    //     std::cout << "未找到缓存或加载失败，开始从 OBJ 构建..." << std::endl;
-    //     auto dragon_triangles = load_obj("../mesh/xyzrgb_dragon.obj", material_dragon, 0.1, Point3(4, 1.3, -1.0));
-    //     if (dragon_triangles->objects.size() > 0) {
-    //         std::cout << "正在构建 BVH..." << std::endl;
-    //         auto bvh = make_shared<BvhNode>(*dragon_triangles, 0, 1);
-    //         world.add(bvh);
-            
-    //         // 保存到缓存
-    //         std::cout << "正在保存 BVH 到缓存..." << std::endl;
-    //         save_bvh_to_file(bvh_cache_file, bvh);
-    //         std::cout << "BVH 已保存到 " << bvh_cache_file << std::endl;
-    //     }
-    // }
-
+    auto material_light = make_shared<DiffuseLight>(Color(12.0, 12.0, 12.0)); // 光（path tracing用的）
+    // auto material_light = make_shared<DiffuseLight>(Color(100.0, 100.0, 100.0)); // 更强的光（PM用的）
     //目前平面类还每实现
     // 地面
     world.add(make_shared<Sphere>(Point3( 0.0, -100.5, -1.0), 100.0, material_ground));
@@ -139,25 +106,23 @@ int main(int argc, char* argv[]) {
     world.add(make_shared<Sphere>(Point3(0, 0, 1005), 1000, material_wall_back));
 
     // 光源 (在上方)
-    auto light_sphere = make_shared<Sphere>(Point3(0, 1.5, -0.5), 0.2, material_light);
-    //这里把光源放到摄像机前面，可以直接看见光源，方便测试SPPM直接光照部分
+    auto light_sphere = make_shared<Sphere>(Point3(0.8, 1.5, 0.2), 0.3, material_light);
+    //这里把光源放到摄像机前面，可以直接看见光源，方便测试PM直接光照部分
     
     world.add(light_sphere);
     lights.push_back(light_sphere); // Add to lights list
 
     // 物体
     // world.add(make_shared<Sphere>(Point3( 0.0,    0.0, -1.0),   0.3, material_center));
-    world.add(make_shared<Sphere>(Point3(0.0,    0.0, 0.5),   0.4, material_glass));
+    world.add(make_shared<Sphere>(Point3( 0.0,    0.0, -1.0),   0.4, material_cat));
+    // world.add(make_shared<Sphere>(Point3(-0.5,    0.0, 0.2),   0.5, material_glass));
+    // world.add(make_shared<Sphere>(Point3(-0.5,    0.0, 0.2),   0.5, color_glass));
     world.add(make_shared<Sphere>(Point3( 1.1,    0.0, -1.1),   0.7, material_metal));
 
     // 摄像机
     Point3 lookfrom(0, 1, 4); // 调整相机位置，正对墙角
     Point3 lookat(0,0,-1);
     
-    // 调整相机以观察焦散
-    // 光源在 (0, 0.8, -0.5)，玻璃球在 (0, 0, 0.5)
-    // 光线穿过玻璃球后，焦散会投射在玻璃球后方的地面上 (Z轴正向，Y=-0.5)
-    // 所以我们需要从侧后方或者正后方看地面
     // Point3 lookfrom(0, 0.5, 2.5); // 降低高度，拉近距离
     // Point3 lookat(0, -0.5, 0.5);  // 看向玻璃球下方的地面区域
     
@@ -175,23 +140,17 @@ int main(int argc, char* argv[]) {
     std::vector<unsigned char> buffer;
 
     if (mode == "pm") {
-        // Simple PM Parameters
+        // PM的参数 
         int num_photons = samples * 10000; 
-        double radius = 0.01; 
+        double radius = 0.002; 
         render_pm(world, lights, cam, image_width, image_height, num_photons, max_depth, radius, buffer);
     } else if (mode == "ppm") {
-        // PPM Parameters
+        // PPM 参数
         int num_photons = samples * 10000; 
-        double radius = 0.01; 
+        double radius = 0.01; //ppm的初始半径要大，因为会不断缩减，如果一开始没有搜索到光子，后面就更难搜到了
         render_ppm(world, lights, cam, image_width, image_height, num_photons, max_depth, radius, buffer);
-    } else if (mode == "sppm") {
-        // SPPM Parameters
-        int iterations = samples;
-        int photons_per_iter = 10000;
-        double radius = 0.01;
-        render_sppm(world, lights, cam, image_width, image_height, iterations, photons_per_iter, max_depth, radius, buffer);
     } else {
-        // Default Path Tracing
+        // 默认路径追踪
         render_path_tracing(world, cam, image_width, image_height, samples_per_pixel, max_depth, buffer);
     }
 
@@ -201,8 +160,6 @@ int main(int argc, char* argv[]) {
                 << static_cast<int>(buffer[i+1]) << ' '
                 << static_cast<int>(buffer[i+2]) << '\n';
     }
-
-    std::cout << "\n完事\n";
     outfile.close();
 
     std::cout << "ppm格式的文件已保存到 " << filename << std::endl;

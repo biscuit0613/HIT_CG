@@ -23,7 +23,7 @@ struct HitPoint {
     int pixel_index;    // 对应的图像像素索引
     
     // PPM 统计数据
-    double r2;          // 当前光子搜索半径的平方
+    double r2;          // 当前光子搜索半径的平方，这里用平方避免乘的那个系数开根号
     double n_new;       // 当前迭代收集到的光子数量
     Color flux_new;     // 当前迭代收集到的光子能量 (Flux)
     
@@ -35,107 +35,64 @@ struct HitPoint {
           n_new(0), flux_new(0,0,0), n_accum(0), flux_accum(0,0,0) {}
 };
 
-// 哈希网格：用于加速光子对 HitPoint 的查找
-class HashGrid {
-public:
-    HashGrid(double cell_size, int size) : cell_size(cell_size), size(size) {
-        table.resize(size);
-    }
-
-    // 构建网格：将所有 HitPoint 放入对应的网格单元
-    void build(std::vector<HitPoint*>& hit_points) {
-        for (auto& list : table) list.clear();
-        for (auto hp : hit_points) {
-            int idx = hash(hp->p);
-            table[idx].push_back(hp);
-        }
-    }
-
-    // 更新 HitPoint：当光子击中漫反射表面时，查找附近的 HitPoint 并更新其统计数据
-    void update(const Point3& p, const Vec3& dir, const Color& power) {
-        int cx = static_cast<int>(std::floor(p.x() / cell_size));
-        int cy = static_cast<int>(std::floor(p.y() / cell_size));
-        int cz = static_cast<int>(std::floor(p.z() / cell_size));
-
-        // 搜索 3x3x3 的邻域网格
-        for (int dz = -1; dz <= 1; ++dz) {
-            for (int dy = -1; dy <= 1; ++dy) {
-                for (int dx = -1; dx <= 1; ++dx) {
-                    int idx = hash_coords(cx + dx, cy + dy, cz + dz);
-                    for (auto hp : table[idx]) {
-                        double dist_sq = (hp->p - p).length_squared();
-                        // 检查光子是否在 HitPoint 的搜索半径内
-                        if (dist_sq <= hp->r2) {
-                            // 检查法线方向，避免漏光 (Light Leaking)
-                            // 只有当光子入射方向与 HitPoint 法线相反（即从外部射入）时才统计
-                            if (dot(hp->normal, dir) < 0) { 
-                                #pragma omp atomic
-                                hp->n_new += 1;
-                                #pragma omp atomic
-                                hp->flux_new.e[0] += power.e[0];
-                                #pragma omp atomic
-                                hp->flux_new.e[1] += power.e[1];
-                                #pragma omp atomic
-                                hp->flux_new.e[2] += power.e[2];
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    int hash(const Point3& p) const {
-        int x = static_cast<int>(std::floor(p.x() / cell_size));
-        int y = static_cast<int>(std::floor(p.y() / cell_size));
-        int z = static_cast<int>(std::floor(p.z() / cell_size));
-        return hash_coords(x, y, z);
-    }
-
-    int hash_coords(int x, int y, int z) const {
-        unsigned int h = (x * 73856093) ^ (y * 19349663) ^ (z * 83492791);
-        return h % size;
-    }
-
-    std::vector<std::list<HitPoint*>> table;
-    double cell_size;
-    int size;
-};
-
 // 第一步：Eye Pass (视线追踪)
 // 从相机发射光线，记录与漫反射表面的交点 (HitPoint)
-inline void trace_eye_path(Ray ray, int dep, int pixel_index, const HittableObjList& world, Color throughput, std::vector<HitPoint>& hit_points, double initial_radius, std::vector<Color>& direct_buffer, int width) {
+// 改进：增加 max_depth 参数防止无限递归；对玻璃材质使用分支追踪而非俄罗斯轮盘赌
+inline void trace_eye_path(Ray ray, int dep, int max_depth, int pixel_index, const HittableObjList& world, Color throughput, std::vector<HitPoint>& hit_points, double initial_radius, std::vector<Color>& direct_buffer, int width) {
+    if (dep > max_depth) return;
     if (max_in_xyz(throughput) < 1e-4) return;
     
-    std::pair<int, double> intersect_result = nearest_hit(ray, world);//返回最近的碰撞物体的索引和距离
-    if (intersect_result.first == -1) return;//如果索引是-1，说明没有碰撞，直接返回
+    std::pair<int, double> intersect_result = nearest_hit(ray, world);
+    if (intersect_result.first == -1) return;
     
-    HittableObj* obj = world.objects[intersect_result.first].get();//通过索引获取碰撞物体的指针
-    Point3 x = ray.at(intersect_result.second);//碰撞点的位置。用于后面photon pass
+    HittableObj* obj = world.objects[intersect_result.first].get();
+    Point3 x = ray.at(intersect_result.second);
     
     HitRecord rec;
-    obj->hit(ray, 0.001, infinity, rec);//这时候才用hit函数获取碰撞信息hitrecord
+    obj->hit(ray, 0.001, infinity, rec);
 
-    //下面获取碰撞点的法线和材质信息，和pm类似
     Vec3 n = rec.normal;
     Vec3 nl = dot(n, ray.direction()) < 0 ? n : -n;
     
+    // 检查是否击中光源 (直接光照)
+    if (auto light = std::dynamic_pointer_cast<DiffuseLight>(rec.mat_ptr)) {
+        Color emitted = light->emit->value(0,0,x);
+        // 直接将光源贡献写入 direct_buffer
+        direct_buffer[pixel_index] += throughput * emitted;
+        return; // 光源通常不进行漫反射散射
+    }
+
     std::pair<Refl_t, Color> feature = get_feature(rec.mat_ptr, x);
     Color f = feature.second;
     
     if (feature.first == DIFF) {
         // 第一次直接撞上漫反射表面：记录 HitPoint，停止追踪
-        // PPM 将负责计算该点的所有光照（直接+间接）
         #pragma omp critical
         hit_points.emplace_back(x, nl, throughput * f, pixel_index, initial_radius * initial_radius);
         return;
     } else if (feature.first == SPEC) {
         // 镜面反射：继续递归追踪
         Ray reflray = Ray(x, reflect(ray.direction(), n));
-        trace_eye_path(reflray, dep + 1, pixel_index, world, throughput * f, hit_points, initial_radius, direct_buffer, width);
+        trace_eye_path(reflray, dep + 1, max_depth, pixel_index, world, throughput * f, hit_points, initial_radius, direct_buffer, width);
     } else if (feature.first == REFR) {
-        // 折射/介质：计算菲涅尔项，决定反射或折射
-        double refraction_ratio = dot(n, ray.direction()) < 0 ? (1.0/1.5) : 1.5;
+        // 折射/介质：计算菲涅尔项
+        double ir ; // 折射率
+        Color transmission = Color(1,1,1); // 默认透射颜色
+        
+        // 获取材质的具体参数
+        if (auto diel = std::dynamic_pointer_cast<Dielectric>(rec.mat_ptr)) {
+            ir = diel->ir;
+            // Beer's Law: 计算介质内部吸收
+            if (dot(n, ray.direction()) > 0) { // 如果是从内部射出 (dot > 0)
+                 // rec.t 是光线在介质内部传播的距离
+                 double r = exp(-diel->absorbance.x() * rec.t);
+                 double g = exp(-diel->absorbance.y() * rec.t);
+                 double b = exp(-diel->absorbance.z() * rec.t);
+                 transmission = Color(r, g, b);
+            }
+        }
+
+        double refraction_ratio = dot(n, ray.direction()) < 0 ? (1.0/ir) : ir;
         Vec3 unit_dir = unit_vector(ray.direction());
         double cos_theta = fmin(dot(-unit_dir, nl), 1.0);
         double sin_theta = sqrt(1.0 - cos_theta*cos_theta);
@@ -144,27 +101,35 @@ inline void trace_eye_path(Ray ray, int dep, int pixel_index, const HittableObjL
         Vec3 d_refracted;
         if (!cannot_refract) d_refracted = refract(unit_dir, nl, refraction_ratio);
         
+        // 应用透射衰减
+        Color current_throughput = throughput * f * transmission;
+
         if (cannot_refract) {
-            trace_eye_path(Ray(x, reflect(unit_dir, nl)), dep + 1, pixel_index, world, throughput * f, hit_points, initial_radius, direct_buffer, width);
+            // 全反射
+            trace_eye_path(Ray(x, reflect(unit_dir, nl)), dep + 1, max_depth, pixel_index, world, current_throughput, hit_points, initial_radius, direct_buffer, width);
         } else {
-            auto r0 = (1-1.5)/(1+1.5); r0 = r0*r0;
+            auto r0 = (1-ir)/(1+ir); r0 = r0*r0;
             double Re = r0 + (1-r0)*pow((1 - cos_theta), 5);
             double Tr = 1 - Re;
-            double P = .25 + .5 * Re;
             
-            // 俄罗斯轮盘赌：随机选择反射或折射路径
-            if (random_double() < P) {
-                trace_eye_path(Ray(x, reflect(unit_dir, nl)), dep + 1, pixel_index, world, throughput * f * (Re/P), hit_points, initial_radius, direct_buffer, width);
-            } else {
-                trace_eye_path(Ray(x, d_refracted), dep + 1, pixel_index, world, throughput * f * (Tr/(1-P)), hit_points, initial_radius, direct_buffer, width);
-            }
+            // 改进：分支追踪 (Branching)
+            // 同时追踪反射和折射，按菲涅尔权重分配 throughput
+            
+            // 反射路径
+            if (Re > 0.001) // 优化：权重太小就不追踪
+                trace_eye_path(Ray(x, reflect(unit_dir, nl)), dep + 1, max_depth, pixel_index, world, current_throughput * Re, hit_points, initial_radius, direct_buffer, width);
+            
+            // 折射路径
+            if (Tr > 0.001)
+                trace_eye_path(Ray(x, d_refracted), dep + 1, max_depth, pixel_index, world, current_throughput * Tr, hit_points, initial_radius, direct_buffer, width);
         }
     }
 }
 
 // 第二步：Photon Pass (光子追踪)
 // 从光源发射光子，当光子击中漫反射表面时，更新附近的 HitPoint
-inline void trace_photon_ppm(Ray ray, int dep, Color power, HashGrid& grid, const HittableObjList& world) {
+// 使用 Material里的scatter 进行重要性采样，统一光照传输逻辑
+inline void trace_photon_ppm(Ray ray, int dep, Color power, KDTree<HitPoint>& tree, const HittableObjList& world, double max_dist_sq) {
     if (max_in_xyz(power) < 1e-8) return;
     
     std::pair<int, double> intersect_result = nearest_hit(ray, world);
@@ -175,64 +140,48 @@ inline void trace_photon_ppm(Ray ray, int dep, Color power, HashGrid& grid, cons
     
     HitRecord rec;
     obj->hit(ray, 0.001, infinity, rec);
-    Vec3 n = rec.normal;
-    Vec3 nl = dot(n, ray.direction()) < 0 ? n : -n;
     
-    std::pair<Refl_t, Color> feature = get_feature(rec.mat_ptr, x);
-    Color f = feature.second;
-    
-    // 俄罗斯轮盘赌：决定光子是否存活
-    double p_survive = max_in_xyz(f);
-    if (++dep > 5) {
-        if (random_double() < p_survive) f = f / p_survive;
-        else return;
+    // 是漫反射表面，存储光子
+    if (std::dynamic_pointer_cast<DiffuseLight>(rec.mat_ptr) == nullptr) {
+        std::pair<Refl_t, Color> feature = get_feature(rec.mat_ptr, x);
+        if (feature.first == DIFF) {
+            tree.search(x, sqrt(max_dist_sq), [&](HitPoint* hp, double dist_sq) {
+                if (dist_sq <= hp->r2) {
+                    if (dot(hp->normal, ray.direction()) < 0) {
+                        #pragma omp atomic
+                        hp->n_new += 1;
+                        #pragma omp atomic
+                        hp->flux_new.e[0] += power.e[0];
+                        #pragma omp atomic
+                        hp->flux_new.e[1] += power.e[1];
+                        #pragma omp atomic
+                        hp->flux_new.e[2] += power.e[2];
+                    }
+                }
+            });
+        }
     }
 
-    if (feature.first == DIFF) {
-        // 漫反射表面：更新附近的 HitPoint
-        grid.update(x, ray.direction(), power);
+    // 使用材质的 scatter 函数决定光子的下一次反弹，材质里面按理说是不符合物理规律的，但如果严格按照物理规律来玻璃球的噪点非常多。
+    Ray scattered;
+    Color attenuation;
+    if (rec.mat_ptr->scatter(ray, rec, attenuation, scattered)) {
+        // 更新光子能量
+        // attenuation 包含了 BRDF * Cosine / PDF
+        Color new_power = power * attenuation;
+        // 俄罗斯轮盘赌 (Russian Roulette) 决定光子是否存活，使用衰减系数的最大分量作为存活概率
+        double p_survive = max_in_xyz(attenuation);
+        if (p_survive > 1.0) p_survive = 1.0; // 概率不能超过 1
         
-        // 漫反射散射：随机选择一个新的方向继续追踪光子
-        double r1 = 2 * pi * random_double();
-        double r2 = random_double();
-        double r2s = sqrt(r2);
-        
-        Vec3 w = nl;
-        Vec3 u = unit_vector(cross((fabs(w.x()) > .1 ? Vec3(0, 1, 0) : Vec3(1, 0, 0)), w));
-        Vec3 v = cross(w, u);
-        Vec3 d = unit_vector(u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2));
-        
-        trace_photon_ppm(Ray(x, d), dep, power * f, grid, world);
-        
-    } else if (feature.first == SPEC) {
-        // 镜面反射
-        Ray reflray = Ray(x, reflect(ray.direction(), n));
-        trace_photon_ppm(reflray, dep, power * f, grid, world);
-    } else if (feature.first == REFR) {
-        // 折射
-        double refraction_ratio = dot(n, ray.direction()) < 0 ? (1.0/1.5) : 1.5;
-        Vec3 unit_dir = unit_vector(ray.direction());
-        double cos_theta = fmin(dot(-unit_dir, nl), 1.0);
-        double sin_theta = sqrt(1.0 - cos_theta*cos_theta);
-        bool cannot_refract = refraction_ratio * sin_theta > 1.0;
-        
-        Vec3 d_refracted;
-        if (!cannot_refract) d_refracted = refract(unit_dir, nl, refraction_ratio);
-        
-        if (cannot_refract) {
-            trace_photon_ppm(Ray(x, reflect(unit_dir, nl)), dep, power * f, grid, world);
-        } else {
-            auto r0 = (1-1.5)/(1+1.5); r0 = r0*r0;
-            double Re = r0 + (1-r0)*pow((1 - cos_theta), 5);
-            double Tr = 1 - Re;
-            double P = .25 + .5 * Re;
-            
-            if (random_double() < P) {
-                trace_photon_ppm(Ray(x, reflect(unit_dir, nl)), dep, power * f * (Re/P), grid, world);
-            } else {
-                trace_photon_ppm(Ray(x, d_refracted), dep, power * f * (Tr/(1-P)), grid, world);
+        if (++dep > 5) {
+            if (random_double() < p_survive) {// 存活：能量需要除以存活概率进行补偿
+                new_power = new_power / p_survive;
+            } else {// 死亡：停止追踪
+                return;
             }
         }
+        
+        trace_photon_ppm(scattered, dep, new_power, tree, world, max_dist_sq);
     }
 }
 
@@ -243,23 +192,22 @@ inline void render_ppm(
     const Camera& cam, 
     int image_width, 
     int image_height, 
-    int total_photons, // 总光子数
+    int total_photon_num, // 总光子数
     int max_depth,
     double initial_radius,
     std::vector<unsigned char>& buffer
 ) {
-    std::cout << "Starting Progressive Photon Mapping (PPM)..." << std::endl;
+    std::cout << "开始渐进式光子映射 (PPM)" << std::endl;
     
     // PPM 参数
     int iterations = 100; // 迭代次数
-    int photons_per_iter = total_photons / iterations; // 每次迭代发射的光子数
-    if (photons_per_iter < 1000) photons_per_iter = 1000;
-    double alpha = 0.7; // 半径缩减参数 (0.7 是经验值)
+    int photons_per_iter = total_photon_num / iterations; // 每次迭代发射的光子数
+    double alpha = 0.85; // 半径缩减参数
     
-    std::cout << "Iterations: " << iterations << ", Photons/Iter: " << photons_per_iter << std::endl;
+    std::cout << "ppm迭代次数： " << iterations << ", 每次迭代光子数: " << photons_per_iter << std::endl;
 
-    // 1. Eye Pass (视线追踪阶段)
-    std::cout << "Eye Pass..." << std::endl;
+    // 1. 视线追踪阶段
+    std::cout << "视线追踪阶段" << std::endl;
     std::vector<HitPoint> hit_points;
     std::vector<Color> direct_buffer(image_width * image_height, Color(0,0,0)); // 暂未使用
     
@@ -271,29 +219,28 @@ inline void render_ppm(
             Ray r = cam.get_ray(u, v);
             
             int pixel_index = ((image_height - 1 - j) * image_width + i);
-            trace_eye_path(r, 0, pixel_index, world, Color(1,1,1), hit_points, initial_radius, direct_buffer, image_width);
+            trace_eye_path(r, 0, max_depth, pixel_index, world, Color(1,1,1), hit_points, initial_radius, direct_buffer, image_width);
         }
     }
-    std::cout << "Hit Points: " << hit_points.size() << std::endl;
+    std::cout << "得到的可见点数： " << hit_points.size() << std::endl;
     
-    // 2. Iterations (迭代阶段)
+    // 构建 KD-Tree (只需构建一次)
+    KDTree<HitPoint> tree(hit_points);
+
+    // 2. 迭代阶段
     for (int iter = 0; iter < iterations; ++iter) {
-        std::cout << "\rIteration " << iter + 1 << "/" << iterations << std::flush;
+        std::cout << "\r迭代第" << iter + 1 << "次 " << iter + 1 << "/" << iterations << std::flush;
         
-        // 构建哈希网格，用于加速光子查找
-        double current_radius = 0;
-        if (!hit_points.empty()) current_radius = sqrt(hit_points[0].r2);
-        HashGrid grid(current_radius * 2.0, hit_points.size() + 1000);
-        
-        std::vector<HitPoint*> hp_ptrs;
-        for (auto& hp : hit_points) hp_ptrs.push_back(&hp);
-        grid.build(hp_ptrs);
-        
-        // Trace Photons (光子追踪)
+        // 计算当前最大的搜索半径平方，用于 KD-Tree 剪枝
+        double max_r2 = 0;
+        for (const auto& hp : hit_points) {
+            if (hp.r2 > max_r2) max_r2 = hp.r2;
+        }
+
+        // 光子追踪阶段
         #pragma omp parallel for schedule(dynamic, 1)
         for (int i = 0; i < photons_per_iter; ++i) {
-            if (lights.empty()) continue;
-            // 随机选择一个光源
+            if (lights.empty()) continue;//可以试试多个光源，目前场景里面就一个。
             int light_idx = static_cast<int>(random_double(0, lights.size()-0.01));
             auto light = lights[light_idx];
             if (auto sphere = std::dynamic_pointer_cast<Sphere>(light)) {
@@ -301,27 +248,24 @@ inline void render_ppm(
                 Point3 origin = sphere->center + random_unit_vector() * sphere->radius;
                 Vec3 dir = random_unit_vector();
                 if (dot(dir, origin - sphere->center) < 0) dir = -dir;
-                
                 Color L = std::dynamic_pointer_cast<DiffuseLight>(sphere->mat_ptr)->emit->value(0,0,origin);
                 double area = 4 * pi * sphere->radius * sphere->radius;
-                Color photon_power = L * area * pi / photons_per_iter; // 单个光子的能量
-                
-                trace_photon_ppm(Ray(origin, dir), 0, photon_power, grid, world);
+                Color photon_power = L * area * pi / photons_per_iter; // 单个光子的能量，需要除以每次迭代的光子数    
+                trace_photon_ppm(Ray(origin, dir), 0, photon_power, tree, world, max_r2);
             }
         }
-        
-        // Update HitPoints (更新 HitPoint 统计数据并缩减半径)
+        // 更新 HitPoint 统计数据并缩减半径
         for (auto& hp : hit_points) {
             if (hp.n_new > 0) {
                 double N = hp.n_accum;
                 double M = hp.n_new;
-                
-                // 半径缩减公式 (Hachisuka et al. 2008)
+                // 半径缩减公式
                 // R_{i+1}^2 = R_i^2 * (N + alpha * M) / (N + M)
                 double ratio = (N + alpha * M) / (N + M);
                 
                 hp.r2 *= ratio;
                 // 累积能量也需要按比例缩放，以保持密度估计的一致性
+                // 公式：tau_{i+1} = (tau_i + phi_i) * ratio
                 hp.flux_accum = (hp.flux_accum + hp.flux_new) * ratio;
                 hp.n_accum = N + alpha * M;
                 
@@ -331,21 +275,30 @@ inline void render_ppm(
             }
         }
     }
-    std::cout << std::endl;
     
-    // 3. Reconstruct Image (重建图像)
+    // 3.重建最终图像
     std::vector<Color> final_image(image_width * image_height, Color(0,0,0));
+    
+    // 添加直接光照贡献 (来自 Eye Pass)
+    for (int i = 0; i < image_width * image_height; ++i) {
+        final_image[i] += direct_buffer[i];
+    }
+
     for (const auto& hp : hit_points) {
-        if (hp.r2 > 1e-8) {
+        if (hp.r2 > 1e-9) {
             // 辐射度估计公式
             // L = Flux / (Area * Total_Emitted_Photons)
-            // 注意：这里的 flux_accum 已经包含了半径缩减的修正
-            Color radiance = hp.flux_accum / (pi * hp.r2 * photons_per_iter);
-            final_image[hp.pixel_index] += radiance * hp.throughput;
+            // 这里的 flux_accum 是多次迭代的累积值，相当于 sum(Flux_i)
+            // 而 photon_power 已经除以了单次迭代的光子数 photons_per_iter
+            // 所以除以迭代次数 iterations 来取平均
+            // 另外，HitPoint 位于漫反射表面，其 BRDF = albedo / pi
+            // hp.throughput 中只包含了 albedo，所以还需要除以 pi
+            Color radiance = hp.flux_accum / (pi * hp.r2 * iterations);//可以试试换成 photons_per_iter * iterations，会过曝
+            final_image[hp.pixel_index] += radiance * hp.throughput / pi;
         }
     }
     
-    // 写入缓冲区 (包含 ACES 色调映射和 Gamma 校正)
+    // 写入缓冲区 
     buffer.assign(image_width * image_height * 3, 0);
     for (int i = 0; i < image_width * image_height; ++i) {
         Color c = final_image[i];
@@ -357,7 +310,7 @@ inline void render_ppm(
         buffer[i*3+1] = static_cast<unsigned char>(256 * clamp(g, 0.0, 0.999));
         buffer[i*3+2] = static_cast<unsigned char>(256 * clamp(b, 0.0, 0.999));
     }
-    std::cout << "Done." << std::endl;
+    std::cout << "渲染完成" << std::endl;
 }
 
 #endif

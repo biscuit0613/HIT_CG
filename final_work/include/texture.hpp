@@ -17,7 +17,7 @@ public:
 
 /**
 * 纯色纹理类，表示单一颜色的纹理
-* @func value重载：始终返回相同的颜色值
+* @func value重载：始终返回相同的颜色值，和uv无关
 */
 class SolidColor : public Texture {
 public:

@@ -1,5 +1,7 @@
 #include "vec3.h"
 #include "ray.h"
+#include "hittable_obj.h"
+#include "material.hpp"
 
 /*
 平面的方程：ax + by + cz + d = 0
