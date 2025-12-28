@@ -72,7 +72,7 @@ int main(int argc, char* argv[]) {
     // 世界，显而易见的世界也是一个支持光追的物体列表
     HittableObjList world;
     std::vector<shared_ptr<HittableObj>> lights; // Keep track of lights for SPPM
-
+    
     //用指针的方式创建材质，方便多个物体共享同一个材质。
     auto material_ground = make_shared<Lambertian>(Color(0.5, 0.5, 0.5)); // 地面灰色
     auto material_cat_pic = make_shared<ImageTexture>("maodie.png"); 
