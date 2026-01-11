@@ -82,16 +82,16 @@ int main(int argc, char* argv[]) {
     auto material_wall_right = make_shared<Lambertian>(Color(0.3, 0.7, 0.3)); // 右墙绿色
     auto material_wall_left = make_shared<Lambertian>(Color(0.3, 0.3, 0.7)); // 左墙蓝色
     
-    auto material_center = make_shared<Lambertian>(Color(0.1, 0.2, 0.5));
-    // auto material_center_texture = make_shared<ImageTexture>("maodie.png");
-    // auto material_center = make_shared<Lambertian>(material_center_texture);
+    // auto material_center = make_shared<Lambertian>(Color(0.1, 0.2, 0.5));
+    auto texture_center = make_shared<ImageTexture>("maodie.png");
+    auto material_center = make_shared<Lambertian>(texture_center);
 
     auto material_glass = make_shared<Dielectric>(1.5); // 玻璃 
     auto color_glass = make_shared<Dielectric>(1.5,Color(0,0.5,0));//绿色玻璃
     // 增加一点粗糙度 (fuzz = 0.01) 让金属看起来更真实，不是完美的镜子
     auto material_metal  = make_shared<Metal>(Color(0.8, 0.6, 0.2), 0.01);
 
-    auto material_light = make_shared<DiffuseLight>(Color(12.0, 12.0, 12.0)); // 光（path tracing用的）
+    auto material_light = make_shared<DiffuseLight>(Color(50.0, 50.0, 50.0)); // 光（path tracing用的）
     // auto material_light = make_shared<DiffuseLight>(Color(100.0, 100.0, 100.0)); // 更强的光（PM用的）
     //目前平面类还每实现
     // 地面
@@ -106,16 +106,16 @@ int main(int argc, char* argv[]) {
     world.add(make_shared<Sphere>(Point3(0, 0, 1005), 1000, material_wall_back));
 
     // 光源 (在上方)
-    auto light_sphere = make_shared<Sphere>(Point3(0.8, 1.5, 0.2), 0.3, material_light);
+    auto light_sphere = make_shared<Sphere>(Point3(0.8, 1.5, 0.2), 0.2, material_light);
     //这里把光源放到摄像机前面，可以直接看见光源，方便测试PM直接光照部分
     
     world.add(light_sphere);
     lights.push_back(light_sphere); // Add to lights list
 
     // 物体
-    // world.add(make_shared<Sphere>(Point3( 0.0,    0.0, -1.0),   0.3, material_center));
-    world.add(make_shared<Sphere>(Point3( 0.0,    0.0, -1.0),   0.4, material_cat));
-    // world.add(make_shared<Sphere>(Point3(-0.5,    0.0, 0.2),   0.5, material_glass));
+    // world.add(make_shared<Sphere>(Point3( -0.5,    0.0, 0.5),   0.5, material_center));
+    // world.add(make_shared<Sphere>(Point3( 0.0,    0.0, -1.0),   0.4, material_cat));
+    world.add(make_shared<Sphere>(Point3(-0.5,    0.0, 0.2),   0.5, material_glass));
     // world.add(make_shared<Sphere>(Point3(-0.5,    0.0, 0.2),   0.5, color_glass));
     world.add(make_shared<Sphere>(Point3( 1.1,    0.0, -1.1),   0.7, material_metal));
 

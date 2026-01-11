@@ -11,8 +11,8 @@
 /**
 *材质基类，所有材质都应继承自此类
 *材质决定了光线与物体表面交互的方式。
-*@func emitted，表示材质发光（如光源材质）
-*@func scatter，它决定了入射光线 (r_in) 如何变成成新的光线 (scatteredRay)，以及光线被衰减了多少 (attenuation或albedo)。
+*@brief emitted，表示材质发光（如光源材质）
+*@brief scatter，它决定了入射光线 (r_in) 如何变成成新的光线 (scatteredRay)，以及光线被衰减了多少 (attenuation或albedo)。
 */
 class Material {
 public:
@@ -68,6 +68,7 @@ public:
     Lambertian(const Color& a) : albedo(make_shared<SolidColor>(a)) {}
     Lambertian(shared_ptr<Texture> a) : albedo(a) {}
 
+    //返回bool,修改scatterray的方向（但并不改颜色）
     virtual bool scatter(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scatteredRay) const override {
         // 漫反射散射方向：法线方向 + 单位球内的随机向量
         // 这近似了朗伯余弦定律 (Lambert's Cosine Law)
@@ -88,8 +89,8 @@ public:
 
 
 /*金属材质 (Metal)模拟光滑或粗糙的金属表面，发生镜面反射
-*@func 构造函数：传入颜色和模糊因子f
-*@func scatter 函数实现：反射向量+加模糊因子 (fuzz)
+*@brief 构造函数：传入颜色和模糊因子f
+*@brief scatter 函数实现：反射向量+加模糊因子 (fuzz)
 */
 class Metal : public Material {
 public:
@@ -116,8 +117,8 @@ public:
 };
 
 /**  绝缘体/电介质材质 (Dielectric)模拟玻璃，发生折射和反射
-*@func Dielectric 构造函数：传入折射率，吸光度
-*@func scatter 函数实现：根据斯涅尔定律计算折射，考虑全内反射和菲涅尔效应
+*@brief Dielectric 构造函数：传入折射率，吸光度
+*@brief scatter 函数实现：根据斯涅尔定律计算折射，考虑全内反射和菲涅尔效应
 */
 class Dielectric : public Material {
 public:

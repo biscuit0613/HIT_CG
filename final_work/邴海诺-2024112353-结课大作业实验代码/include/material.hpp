@@ -11,8 +11,8 @@
 /**
 *材质基类，所有材质都应继承自此类
 *材质决定了光线与物体表面交互的方式。
-*@func emitted，表示材质发光（如光源材质）
-*@func scatter，它决定了入射光线 (r_in) 如何变成成新的光线 (scatteredRay)，以及光线被衰减了多少 (attenuation或albedo)。
+*@brief emitted，表示材质发光（如光源材质）
+*@brief scatter，它决定了入射光线 (r_in) 如何变成成新的光线 (scatteredRay)，以及光线被衰减了多少 (attenuation或albedo)。
 */
 class Material {
 public:
@@ -33,9 +33,9 @@ public:
 
 /**
 * 漫射光源材质 (Diffuse Light)模拟自发光的材质，如灯光
-* DiffuseLight 构造函数：传入发光颜色或颜色指针
-* scatter 函数实现：r_in碰到光源不进行互动，光源只会主动发光
-* emitted 函数实现：返回发光颜色
+* @brief DiffuseLight 构造函数：传入发光颜色或颜色指针
+* @brief scatter 函数实现：r_in碰到光源不进行互动，光源只会主动发光
+* @brief emitted 函数实现：返回发光颜色
 */
 class DiffuseLight : public Material {
 public:
@@ -57,9 +57,10 @@ public:
 };
 
 
-/*漫反射材质 (Lambertian)模拟粗糙表面，光线向各个方向随机散射
-* Lambertian 构造函数：传入漫反射颜色
-* scatter 函数实现：漫反射散射方向：法线方向 + 单位球内的随机向量
+/**
+* 漫反射材质 (Lambertian)模拟粗糙表面，光线向各个方向随机散射
+* @brief Lambertian 构造函数：传入漫反射颜色
+* @brief scatter 函数实现：漫反射散射方向：法线方向 + 单位球内的随机向量
 * 这近似了朗伯余弦定律 (Lambert's Cosine Law)
 */
 class Lambertian : public Material {
@@ -87,9 +88,10 @@ public:
 };
 
 
-/*金属材质 (Metal)模拟光滑或粗糙的金属表面，发生镜面反射
-*@func 构造函数：传入颜色和模糊因子f
-*@func scatter 函数实现：反射向量+加模糊因子 (fuzz)
+/**
+*金属材质 (Metal)模拟光滑或粗糙的金属表面，发生镜面反射
+*@brief 构造函数：传入颜色和模糊因子f
+*@brief scatter 函数实现：反射向量+加模糊因子 (fuzz)
 */
 class Metal : public Material {
 public:
@@ -115,9 +117,10 @@ public:
     double fuzz;// 模糊因子，范围 [0, 1]
 };
 
-/**  绝缘体/电介质材质 (Dielectric)模拟玻璃，发生折射和反射
-*@func Dielectric 构造函数：传入折射率，吸光度
-*@func scatter 函数实现：根据斯涅尔定律计算折射，考虑全内反射和菲涅尔效应
+/**  
+* 绝缘体/电介质材质 (Dielectric)模拟玻璃，发生折射和反射
+*@brief Dielectric 构造函数：传入折射率，吸光度
+*@brief scatter 函数实现：根据斯涅尔定律计算折射，考虑全内反射和菲涅尔效应
 */
 class Dielectric : public Material {
 public:

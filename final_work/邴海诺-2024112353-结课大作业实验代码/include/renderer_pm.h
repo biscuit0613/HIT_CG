@@ -93,13 +93,12 @@ inline Color eye_trace_estimate(Ray ray, int dep, int max_depth, const HittableO
     Vec3 n = rec.normal;//photon撞到的表面的法线=光线撞到的表面的法线
     Vec3 nl = dot(n, ray.direction()) < 0 ? n : -n;//调整法线方向，使其指向入射光线的一侧
     
+    //用了一个pair存储材质1. 类型和2. 颜色
     std::pair<Refl_t, Color> feature = get_feature(rec.mat_ptr, x);
     Color f = feature.second;
     
     if (feature.first == DIFF) {
-        // 如果是次级射线击中漫反射表面，直接查询 Global Map 估计辐射度
-        if (gather_only) {
-            // 检查是否是光源
+        if (gather_only) {// 如果是次级射线击中漫反射表面，直接查询 Global Map 估计辐射度
             Color emitted(0,0,0);
             if (auto diff_light = std::dynamic_pointer_cast<DiffuseLight>(rec.mat_ptr)) {
                 emitted = diff_light->emit->value(0,0, x);
@@ -264,7 +263,7 @@ inline void render_pm(
     std::cout << "pass2: 渲染图像中" << std::endl;
     std::vector<Color> final_image(image_width * image_height);
     
-    #pragma omp parallel for schedule(dynamic, 1)
+    // #pragma omp parallel for schedule(dynamic, 1)
     for (int j = image_height-1; j >= 0; --j) {
         for (int i = 0; i < image_width; ++i) {
             auto u = (i + random_double()) / (image_width-1);

@@ -6,11 +6,12 @@
 
 
 // 球体类，继承自 HittableObj
-/*** Sphere 类表示三维空间中的一个球体
+/**
+* Sphere 类表示三维空间中的一个球体
 *@param center 球心位置
 *@param radius 球的半径
 *@param mat_ptr 指向球体材质的智能指针
-*@func hit(r, t_min, t_max, rec) 判断光线 r 是否与球体相交
+*@brief hit(r, t_min, t_max, rec) 判断光线 r 是否与球体相交
 */
 class Sphere : public HittableObj {
 public:
@@ -29,7 +30,9 @@ private:
         auto theta = acos(-p.y());
         auto phi = atan2(-p.z(), p.x()) + pi;
 
-        u = phi / (2*pi);
+        // u = phi / (2*pi);
+        u = phi / (2*pi) + 0.15;
+        if (u > 1.0) u -= 1.0;
         v = theta / pi;
     }
 

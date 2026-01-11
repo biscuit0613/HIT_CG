@@ -3,7 +3,7 @@
 #include "hittable_obj.h"
 #include "material.hpp"
 
-/*
+/** 
 平面的方程：ax + by + cz + d = 0
 其中，(a, b, c) 是平面的法向量，d 是常数。
 */

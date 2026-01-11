@@ -7,11 +7,11 @@
 
 using std::sqrt;
 
-/*
-两个类型别名：
-    Point3: 用于表示三维空间中的点
-    Color:  用于表示 RGB 颜色值
-*/
+/** 
+ * 两个类型别名：
+ *    Point3: 用于表示三维空间中的点
+ *    Color:  用于表示 RGB 颜色值
+ */
 class Vec3 {
 public:
     double e[3];

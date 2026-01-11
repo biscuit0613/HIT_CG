@@ -13,7 +13,7 @@
 * @param vup      相机的上向量
 * @param vfov     垂直视野 (vertical field-of-view)，以度为单位
 * @param aspect_ratio  图像的宽高比
-* @func get_ray(s, t) 生成从相机发出的光线，s 和 t 是归一化的图像平面坐标
+* @brief get_ray(s, t) 生成从相机发出的光线，s 和 t 是归一化的图像平面坐标
 */
 class Camera {
 public:

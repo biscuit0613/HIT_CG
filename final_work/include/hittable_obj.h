@@ -14,7 +14,7 @@ class Material;
 *@param mat_ptr   相交点处的材质指针
 *@param t         光线参数 t，在光线方程 P(t) = origin + t*direction 中,一开始是无穷大。
 *@param front_face 布尔值，指示光线是否击中物体的前面
-*@func set_face_normal(r, outward_normal) 根据光线方向和外法线设置 front_face 和 normal
+*@brief set_face_normal(r, outward_normal) 根据光线方向和外法线设置 front_face 和 normal
 */
 struct HitRecord {
     Point3 p;
@@ -39,7 +39,7 @@ struct HitRecord {
 
 /** 
 * HittableObj 类，所有能发生光追的物体都应继承自此类
-*@func hit(r, t_min, t_max, rec) 判断光线 r 是否与物体相交
+*@brief hit(r, t_min, t_max, rec) 判断光线 r 是否与物体相交
 */
 class HittableObj {
 public:

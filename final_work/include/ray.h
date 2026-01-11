@@ -8,7 +8,7 @@
 *对于每一个光线对象
 *@param orig 光线的起点
 *@param dir  光线的方向
-*@func at(t) 返回光线在参数 t 处的位置
+*@brief at(t) 返回光线在参数 t 处的位置
 */
 class Ray {
 public:

@@ -8,7 +8,7 @@
 *三角形类，继承自 HittableObj，用于模型的表示和光线相交计算
 *@param v0,v1,v2 三角形的三个顶点
 *@param mp 指向三角形材质的智能指针
-*@func hit(r, t_min, t_max, rec) MT算法，判断光线 r 是否与三角形相交
+*@brief hit(r, t_min, t_max, rec) MT算法，判断光线 r 是否与三角形相交
 */
 class Triangle : public HittableObj {
 public:
